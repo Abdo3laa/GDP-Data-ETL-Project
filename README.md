@@ -12,7 +12,7 @@ SQLite3 (if database integration is required)
 Datetime
 ### You can install the required libraries using pip:
 
-### bash Copy code:
+### (bash) Copy code:
 pip install beautifulsoup4 requests pandas numpy
 Code Overview
 
@@ -26,7 +26,7 @@ Log the Process
 ## 1. Extract Data from Wikipedia
 The extract function fetches the HTML content of the Wikipedia page and extracts the GDP data.
 
-### python Copy code:
+### (python) Copy code:
 url = 'https://web.archive.org/web/20230902185326/https://en.wikipedia.org/wiki/List_of_countries_by_GDP_%28nominal%29'
 table_attribs = ["Country", "GDP_USD_millions"]
 csv_path = "wikipedia_gdp.csv"
@@ -49,7 +49,7 @@ def extract(url, table_attribs):
 ## 2. Transform the Data
 The transform function processes the extracted data, converting GDP from millions to billions.
 
-### python Copy code:
+### (python) Copy code:
 def transform(df):
     GDP_list = df["GDP_USD_millions"].tolist()
     GDP_list = [float("".join(x.split(','))) for x in GDP_list]
@@ -60,13 +60,13 @@ def transform(df):
 ## 3. Load Data to a CSV File
 The load_to_csv function saves the transformed data to a CSV file.
 
-### python Copy code:
+### (python) Copy code:
 def load_to_csv(df, csv_path):
     df.to_csv(csv_path)
 ## 4. Log the Process
 The log_progress function logs the stages of the ETL process.
 
-### python Copy code:
+### (python) Copy code:
 def log_progress(message):
     ''' This function logs the mentioned message at a given stage of the code execution to a log file. Function returns nothing'''
     timestamp_format = '%Y-%h-%d-%H:%M:%S' # Year-Monthname-Day-Hour-Minute-Second 
@@ -77,7 +77,7 @@ def log_progress(message):
 ## Main Execution
 The main part of the script orchestrates the ETL process.
 
-### python Copy code:
+### (python) Copy code:
 log_progress('Preliminaries complete. Initiating ETL process')
 
 df = extract(url, table_attribs)
