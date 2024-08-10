@@ -1,94 +1,141 @@
-# GDP-Data-ETL-Project
-This project extracts, transforms, and loads GDP data from a Wikipedia page. Below is an explanation of the code used for this process.
+# ETL Project for Largest Banks Data
+This project `extracts`, `transforms`, and `loads` data on the largest banks by market capitalization from a Wikipedia page. Below is an explanation of the code used for this process.
 
 ## Prerequisites
 Ensure you have the following Python libraries installed:
 
-BeautifulSoup (bs4)
-Requests
-Pandas
-Numpy
-SQLite3 (if database integration is required)
-Datetime
-### You can install the required libraries using pip:
+- `beautifulsoup4`
+`requests`
+`pandas`
+`numpy`
+`sqlite3 (if database integration is required)`
 
-### (bash) Copy code:
-pip install beautifulsoup4 requests pandas numpy
-Code Overview
+###You can install the required libraries using pip:
 
+```bash
+pip install beautifulsoup4 requests pandas numpy sqlite3 apache-airflow
+```
+## Code Overview
+The code performs the following steps:
+- Extract Data from Wikipedia
+- Transform the Data
+- Load Data to a CSV File
+- Load Data to SQLite Database
+- Run SQL Queries
+- Log the Process
+  
+### 1. Extract Data from Wikipedia
+The extract function fetches the HTML content of the Wikipedia page and extracts the data on the largest banks.
 
-## The code performs the following steps:
+```python
+url = 'https://web.archive.org/web/20230908091635/https://en.wikipedia.org/wiki/List_of_largest_banks'
+csv_path = r"C:\Users\Abdo\Desktop\Projects\ETL_Preoject_Bank\largest_banks.csv"
 
-Extract Data from Wikipedia
-Transform the Data
-Load Data to a CSV File
-Log the Process
-## 1. Extract Data from Wikipedia
-The extract function fetches the HTML content of the Wikipedia page and extracts the GDP data.
-
-### (python) Copy code:
-url = 'https://web.archive.org/web/20230902185326/https://en.wikipedia.org/wiki/List_of_countries_by_GDP_%28nominal%29'
-table_attribs = ["Country", "GDP_USD_millions"]
-csv_path = "wikipedia_gdp.csv"
-
-def extract(url, table_attribs):
+def extract(url):
     page = requests.get(url).text
     data = soup(page, 'html.parser')
-    df = pd.DataFrame(columns=table_attribs)
-    tables = data.find_all('tbody')
-    rows = tables[2].find_all('tr')
-    for row in rows:
-        col = row.find_all('td')
-        if len(col) != 0:
-            if col[0].find('a') is not None and '—' not in col[2]:
-                data_dict = {"Country": col[0].a.contents[0],
-                             "GDP_USD_millions": col[2].contents[0]}
-                df1 = pd.DataFrame(data_dict, index=[0])
-                df = pd.concat([df, df1], ignore_index=True)
+    heading = data.find('span', {'id': 'By_market_capitalization'})
+    table = heading.find_next('table', {'class': 'wikitable'})
+    df = pd.read_html(StringIO(str(table)))[0]
+    df['Market cap (US$ billion)'] = df['Market cap (US$ billion)'].apply(lambda x: float(str(x).strip()[:-1]))
     return df
-## 2. Transform the Data
-The transform function processes the extracted data, converting GDP from millions to billions.
+```
+### 2. Transform the Data
+The transform function processes the extracted data, converting market capitalization to other currencies using exchange rates.
 
-### (python) Copy code:
-def transform(df):
-    GDP_list = df["GDP_USD_millions"].tolist()
-    GDP_list = [float("".join(x.split(','))) for x in GDP_list]
-    GDP_list = [np.round(x / 1000, 2) for x in GDP_list]
-    df["GDP_USD_millions"] = GDP_list
-    df = df.rename(columns={"GDP_USD_millions": "GDP_USD_billions"})
+```python
+def transform(df, exchange_rate):
+    df['MC_GBP_Billion'] = [np.round(x * exchange_rate['GBP'], 2) for x in df['Market cap (US$ billion)']]
+    df['MC_EUR_Billion'] = [np.round(x * exchange_rate['EUR'], 2) for x in df['Market cap (US$ billion)']]
+    df['MC_INR_Billion'] = [np.round(x * exchange_rate['INR'], 2) for x in df['Market cap (US$ billion)']]
     return df
-## 3. Load Data to a CSV File
+```
+### 3. Load Data to a CSV File
 The load_to_csv function saves the transformed data to a CSV file.
 
-### (python) Copy code:
+```python
 def load_to_csv(df, csv_path):
-    df.to_csv(csv_path)
-## 4. Log the Process
+    df.to_csv(csv_path, index=False)
+    print(f"Data saved to {csv_path}")
+```
+### 4. Load Data to SQLite Database
+The load_to_db function loads the transformed data into an SQLite database.
+
+```python
+def load_to_db(conn, table_name, df):
+    df.to_sql(table_name, conn, if_exists='replace', index=False)
+    print(f"Data loaded into table {table_name} in database.")
+```
+### 5. Run SQL Queries
+The run_queries function executes SQL queries on the SQLite database and logs the output.
+
+```python
+def run_queries(query, conn):
+    """
+    Executes the given SQL query and prints the results.
+    
+    Parameters:
+    query (str): The SQL query to execute.
+    conn (sqlite3.Connection): The SQLite3 database connection object.
+    """
+    print(f"Executing Query: {query}")
+    try:
+        df = pd.read_sql_query(query, conn)
+        print("Query Output:")
+        print(df)
+    except Exception as e:
+        print(f"Error: {e}")
+    
+    log_progress(f"Executed Query: {query}\nOutput: {df.to_string(index=False)}", log_path)
+```
+### 6. Log the Process
 The log_progress function logs the stages of the ETL process.
 
-### (python) Copy code:
-def log_progress(message):
-    ''' This function logs the mentioned message at a given stage of the code execution to a log file. Function returns nothing'''
-    timestamp_format = '%Y-%h-%d-%H:%M:%S' # Year-Monthname-Day-Hour-Minute-Second 
-    now = datetime.now() # get current timestamp 
-    timestamp = now.strftime(timestamp_format) 
-    with open("./etl_project_log.txt","a") as f: 
+```python
+def log_progress(message, log_path):
+    ''' Logs the mentioned message at a given stage of the code execution to a log file. '''
+    timestamp_format = '%Y-%b-%d-%H:%M:%S'
+    now = datetime.now()
+    timestamp = now.strftime(timestamp_format)
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    with open(log_path, "a") as f:
         f.write(timestamp + ' : ' + message + '\n')
-## Main Execution
+```
+### Main Execution
 The main part of the script orchestrates the ETL process.
 
-### (python) Copy code:
-log_progress('Preliminaries complete. Initiating ETL process')
+```python
+log_progress('Preliminaries complete. Initiating ETL process', log_path)
 
-df = extract(url, table_attribs)
-log_progress('Data extraction complete. Initiating Transformation process')
+df = extract(url)
+log_progress('Data extraction complete.', log_path)
 
-df = transform(df)
-log_progress('Data transformation complete. Initiating loading process')
+exchange_rate_df = pd.read_csv(exchange_rate_path)
+exchange_rate = exchange_rate_df.set_index('Currency').to_dict()['Rate']
+
+log_progress('Exchange rate data loaded.', log_path)
+
+df = transform(df, exchange_rate)
+log_progress('Data transformation complete.', log_path)
 
 load_to_csv(df, csv_path)
-log_progress('Data saved to CSV file')
+log_progress('Transformed data saved to CSV file.', log_path)
 
-print("Done")
+conn = sqlite3.connect(db_name)
+load_to_db(conn, table_name, df)
+log_progress(f'Data loaded into table {table_name} in database.', log_path)
+conn.close()
+
+conn = sqlite3.connect(db_name)
+queries = [
+    "SELECT * FROM Largest_banks",
+    "SELECT AVG(MC_GBP_Billion) FROM Largest_banks",
+    "SELECT `Bank name` FROM Largest_banks LIMIT 5"
+]
+for query in queries:
+    run_queries(query, conn)
+conn.close()
+```
 ## Summary
-This project extracts GDP data from a Wikipedia page, transforms it, and loads it into a CSV file while logging each step of the process. This script is a simple demonstration of the ETL (Extract, Transform, Load) process.
+- This project `extracts` data on the largest banks from a Wikipedia page, `transforms` it, and `loads` it into both a CSV file and an SQLite database while logging each step of the process.
+- This script demonstrates the `ETL` (`Extract`, `Transform`, `Load`) process effectively.
